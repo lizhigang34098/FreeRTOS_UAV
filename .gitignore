@@ -1,0 +1,25 @@
+# Keil MDK-ARM build artifacts
+*.o
+*.crf
+*.d
+*.axf
+*.hex
+*.map
+*.dep
+*.lnp
+*.lst
+*.sct
+*.htm
+*.build_log.htm
+
+# Keil debug config
+DebugConfig/
+*.uvguix.*
+
+# IDE / editor
+.vscode/
+*.vscode
+
+# OS
+Thumbs.db
+.DS_Store

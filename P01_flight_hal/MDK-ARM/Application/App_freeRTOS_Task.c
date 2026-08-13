@@ -203,7 +203,8 @@ void led_task(void *args)
             Int_led_turn_off(&right_bottom_led);
         }
 
-        // 将count计数重置
+        /*将count计数重置，% 2 / % 5 在 uint8_t 上要保证刻度稳定，
+        否则 count 涨到 255 溢出后取模错乱。*/
         if (count == 10)
         {
             count = 0;

@@ -4,11 +4,12 @@
 #include "tim.h"
 #include "Com_debug.h"
 
+//电机结构体，定时器，通道，速度
 typedef struct
 {
     TIM_HandleTypeDef *tim;
-    uint16_t channel;
-    int16_t speed; // -32768 => 32767
+    uint32_t channel;
+    uint16_t speed;
 } Motor_Struct;
 
 /**

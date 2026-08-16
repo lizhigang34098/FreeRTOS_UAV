@@ -1,29 +1,28 @@
 #include "Int_motor.h"
 
 /**
- * @brief ´«ÈëµÄ²ÎÊıÆäÊµÊÇ±È½ÏÖµ  ×î´óÎª1000  Ä¬ÈÏÖµÎª200
+ * @brief ï¿½ï¿½ï¿½ï¿½Ä²ï¿½ï¿½ï¿½ï¿½ï¿½Êµï¿½Ç±È½ï¿½Öµ  ï¿½ï¿½ï¿½Îª1000  Ä¬ï¿½ï¿½ÖµÎª200
  *
  * @param speed
  */
 void Int_motor_set_speed(Motor_Struct *motor)
 {
-    if (motor->speed > 1000)
+    if(motor->speed > 1000)
     {
-        debug_printf("motor speed is too big\r\n");
+        debug_printf("motor speed is too high, max is 1000\r\n");
         return;
     }
-
     __HAL_TIM_SET_COMPARE(motor->tim, motor->channel, motor->speed);
 }
 
 
 /**
- * @brief Æô¶¯µç»ú ´«Èë¾ßÌåµç»úµÄ½á¹¹Ìå
+ * @brief ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ä½á¹¹ï¿½ï¿½
  *
  * @param motor
  */
 void Int_motor_start(Motor_Struct *motor)
 {
-    __HAL_TIM_SET_COMPARE(motor->tim, motor->channel,0);
+    __HAL_TIM_SET_COMPARE(motor->tim, motor->channel, 0);
     HAL_TIM_PWM_Start(motor->tim, motor->channel);
 }

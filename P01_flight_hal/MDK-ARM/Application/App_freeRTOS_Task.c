@@ -192,7 +192,7 @@ void led_task(void *args)
         }
         else if (flight_state == FIX_HEIGHT)
         {
-            // 后两个灯常量
+            // 后两个灯常亮
             Int_led_turn_on(&left_bottom_led);
             Int_led_turn_on(&right_bottom_led);
         }

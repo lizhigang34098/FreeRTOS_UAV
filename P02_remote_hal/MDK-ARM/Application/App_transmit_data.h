@@ -6,9 +6,9 @@
 #include "FreeRTOS.h"
 #include "task.h"
 // 定义帧头校验的值
-#define FRAME_HEAD_CHECK_1 's'
-#define FRAME_HEAD_CHECK_2 'g'
-#define FRAME_HEAD_CHECK_3 'g'
+#define FRAME_HEAD_CHECK_1 'c'
+#define FRAME_HEAD_CHECK_2 's'
+#define FRAME_HEAD_CHECK_3 'r'
 
 /**
  * @brief 自动切换SI24R1的模式 => 将采集完成的遥控数据打包发送到飞机

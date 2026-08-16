@@ -5,9 +5,9 @@
 #include "Com_config.h"
 #include "Int_VL53L1X.h"
 // 定义帧头校验的值
-#define FRAME_HEAD_CHECK_1 's'
-#define FRAME_HEAD_CHECK_2 'g'
-#define FRAME_HEAD_CHECK_3 'g'
+#define FRAME_HEAD_CHECK_1 'c'
+#define FRAME_HEAD_CHECK_2 's'
+#define FRAME_HEAD_CHECK_3 'r'
 
 // 最大重试次数
 #define MAX_RETRY_TIMES 10

@@ -67,7 +67,7 @@
 | Com_debug  | printf 重定向到 UART + debug_printf 宏      |
 | Com_pid    | PID 控制器 + 串级 PID                       |
 | Com_imu    | 四元数姿态解算 (Mahony 互补滤波)            |
-| Com_filter | 低通滤波 + 卡尔曼滤波                       |
+| Com_filter | 角速度一阶低通滤波 + 加速度卡尔曼滤波       |
 | Com_tool   | 通用工具函数 (限幅)                         |
 
 ## 无线通信协议

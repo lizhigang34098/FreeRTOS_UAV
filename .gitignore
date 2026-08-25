@@ -23,3 +23,16 @@ DebugConfig/
 # OS
 Thumbs.db
 .DS_Store
+
+# Word temp files
+~$*
+
+# CMSIS components not used by the flight build (CubeMX generated full pack)
+# Only Device, Core and Include are referenced by flight.uvprojx
+flight/Drivers/CMSIS/NN/
+flight/Drivers/CMSIS/DSP/
+flight/Drivers/CMSIS/Core_A/
+flight/Drivers/CMSIS/RTOS/
+flight/Drivers/CMSIS/RTOS2/
+flight/Drivers/CMSIS/Lib/
+flight/Drivers/CMSIS/docs/

@@ -4,9 +4,13 @@
 #include "FreeRTOS.h"
 #include "task.h"
 #include "Com_debug.h"
+#include "Int_IP5305T.h"
+#include "Int_motor.h"
+#include "Int_led.h"
+#include "Com_config.h"
 
-/// @brief 启动FreeRTOS任务
+/// @brief 启动freeRTOS任务
 /// @param  
-void APP_freeRTOS_start(void);
+void App_freeRTOS_start(void);
 
 #endif

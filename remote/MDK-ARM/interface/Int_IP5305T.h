@@ -1,0 +1,12 @@
+#ifndef __INT_IP5305T_H
+#define __INT_IP5305T_H
+
+#include "freeRTOS.h"
+#include "task.h"
+#include "main.h"
+
+/// @brief ∆Ù∂ØIP5305TµÁ‘¥
+/// @param  
+void Int_IP5305T_start(void);
+
+#endif

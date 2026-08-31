@@ -8,6 +8,8 @@
 #include "Int_motor.h"
 #include "Int_led.h"
 #include "Com_config.h"
+#include "Int_SI24R1.h"
+#include "App_receive_data.h"
 
 /// @brief Æô¶¯freeRTOSÈÎÎñ
 /// @param  

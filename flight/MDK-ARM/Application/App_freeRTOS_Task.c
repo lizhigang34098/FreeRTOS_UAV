@@ -18,6 +18,9 @@ Remote_State remote_state = REMOTE_DISCONNECTED;
 //当前飞行状态
 Flight_State flight_state = NORMAL;
 
+// 获取接收的遥控数据
+Remote_Data remote_data = {0};
+
 // 电源管理任务
 void power_task(void *args);
 // 最小推荐填写128 => 128*4 = 512B
@@ -42,6 +45,12 @@ void led_task(void *args);
 TaskHandle_t led_task_handle;
 #define LED_TASK_PERIOD 100
 
+// 通讯任务
+void com_task(void *args);
+#define COM_TASK_STACK_SIZE 128
+#define COM_TASK_PRIORITY 2
+TaskHandle_t com_task_handle;
+#define COM_TASK_PERIOD 6
 
 /**
  * @brief 启动freeRTOS操作系统
@@ -58,7 +67,10 @@ void App_freeRTOS_start(void)
     // 3. 创建LED灯任务
     xTaskCreate(led_task, "led_task", LED_TASK_STACK_SIZE, NULL, LED_TASK_PRIORITY, &led_task_handle);
 
-    // 4. 启动调度器
+    // 4. 创建通讯任务
+    xTaskCreate(com_task, "com_task", COM_TASK_STACK_SIZE, NULL, COM_TASK_PRIORITY, &com_task_handle);
+
+    // 5. 启动调度器
     vTaskStartScheduler();
 }
 
@@ -69,11 +81,17 @@ void power_task(void *args)
     while (1)
     {
 
-        // 每10s执行一次  =>  启动电源  避免自动关机
-        vTaskDelayUntil(&xLastWakeTime, POWER_TASK_PERIOD);
-
-        // 启动电源
-        Int_IP5305T_start();
+        uint32_t res = ulTaskNotifyTake(pdTRUE, POWER_TASK_PERIOD);
+        if (res != 0)
+        {
+            // 收到关机通知
+            Int_IP5305T_shutdown();
+        }
+        else
+        {
+            // 不需要关机 => 正常执行启动
+            Int_IP5305T_start();
+        }
     }
 }
 
@@ -164,3 +182,35 @@ void led_task(void *args)
         vTaskDelayUntil(&xLastWakeTime, LED_TASK_PERIOD);
     }
 }
+
+
+void com_task(void *args)
+{
+    // 获取当前的基准时间
+    TickType_t xLastWakeTime = xTaskGetTickCount();
+    while (1)
+    {
+        // 1. 接收数据
+        uint8_t res = App_receive_data();
+
+        // 2. 根据接收数据的返回值 处理当前飞机的连接状态
+        App_process_connect_state(res);
+
+        // 3. 处理关机命令
+        if (remote_data.shutdown == 1)
+        {
+            // 使用Int_IP5305T_shutdown 关机  功能可以实现  但是项目结构比较奇怪
+            // Int_IP5305T_shutdown();
+
+            // 使用freeRTOS直接任务通知 => 通知电源任务 => 执行关机
+            xTaskNotifyGive(power_task_handle);
+        }
+
+        // 处理飞机的飞行状态
+        App_process_flight_state();
+
+        // 6ms执行一次 接收数据的时间间隔应该等于发送数据的时间间隔
+        vTaskDelayUntil(&xLastWakeTime, COM_TASK_PERIOD);
+    }
+}
+

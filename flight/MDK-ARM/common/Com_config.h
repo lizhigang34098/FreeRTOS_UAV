@@ -12,10 +12,10 @@ typedef enum
 // 飞行状态
 typedef enum
 {
-    IDLE = 0,
-    NORMAL,
-    FIX_HEIGHT,
-    FAIL,
+    IDLE = 0,// 飞机处于空闲状态
+    NORMAL,// 飞机处于正常飞行状态
+    FIX_HEIGHT,// 飞机处于定高状态
+    FAIL,// 飞机处于故障失联状态
 }Flight_State;
 
 typedef struct

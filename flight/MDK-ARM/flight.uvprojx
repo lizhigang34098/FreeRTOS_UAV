@@ -947,6 +947,16 @@
               <FileType>5</FileType>
               <FilePath>.\common\Com_config.h</FilePath>
             </File>
+            <File>
+              <FileName>Com_filter.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>.\common\Com_filter.c</FilePath>
+            </File>
+            <File>
+              <FileName>Com_filter.h</FileName>
+              <FileType>5</FileType>
+              <FilePath>.\common\Com_filter.h</FilePath>
+            </File>
           </Files>
         </Group>
         <Group>
@@ -1132,6 +1142,16 @@
               <FileType>5</FileType>
               <FilePath>.\Application\App_receive_data.h</FilePath>
             </File>
+            <File>
+              <FileName>App_flight.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>.\Application\App_flight.c</FilePath>
+            </File>
+            <File>
+              <FileName>App_flight.h</FileName>
+              <FileType>5</FileType>
+              <FilePath>.\Application\App_flight.h</FilePath>
+            </File>
           </Files>
         </Group>
         <Group>
@@ -1176,6 +1196,16 @@
               <FileName>Int_SI24R1.h</FileName>
               <FileType>5</FileType>
               <FilePath>.\interface\Int_SI24R1.h</FilePath>
+            </File>
+            <File>
+              <FileName>Int_mpu6050.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>.\interface\Int_mpu6050.c</FilePath>
+            </File>
+            <File>
+              <FileName>Int_mpu6050.h</FileName>
+              <FileType>5</FileType>
+              <FilePath>.\interface\Int_mpu6050.h</FilePath>
             </File>
           </Files>
         </Group>

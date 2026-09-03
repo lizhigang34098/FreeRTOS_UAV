@@ -1,10 +1,5 @@
-#include "App_freeRTOS_Task.h"
+ #include "App_freeRTOS_Task.h"
 
-// 电机结构体
-Motor_Struct left_top_motor = {.tim = &htim3, .channel = TIM_CHANNEL_1, .speed = 200};
-Motor_Struct left_bottom_motor = {.tim = &htim4, .channel = TIM_CHANNEL_4, .speed = 200};
-Motor_Struct right_top_motor = {.tim = &htim2, .channel = TIM_CHANNEL_2, .speed = 200};
-Motor_Struct right_bottom_motor = {.tim = &htim1, .channel = TIM_CHANNEL_3, .speed = 200};
 
 //LED结构体
 LED_Struct left_top_led = {.port = LED1_GPIO_Port, .pin = LED1_Pin};
@@ -99,16 +94,17 @@ void flight_task(void *args)
 {
     // 获取当前的基准时间
     TickType_t xLastWakeTime = xTaskGetTickCount();
+    App_flight_init();
     while (1)
     {
+        // 1. 获根据MPU6050测量的数据  姿态解算得到欧拉角
+        App_flight_get_euler_angle();
 
-        // 1. 设置电机的转速
-        left_top_motor.speed = 400;
+        // 2. 根据当前的欧拉角  进行PID计算控制
+        App_flight_pid_process();
 
-        // 2. 直接启动电机
-        // Int_motor_start(&left_top_motor);
-        // Int_motor_start(&right_bottom_motor);
-
+        // 3. 根据PID计算的结果 对电机进行控制
+        App_flight_control_motor();
         vTaskDelayUntil(&xLastWakeTime, FLIGHT_TASK_PERIOD);
     }
 }

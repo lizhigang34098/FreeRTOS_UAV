@@ -7,7 +7,7 @@ float gyro_z_sum = 0;
 
 extern Remote_Data remote_data;
 extern Flight_State flight_state;
-
+extern TaskHandle_t com_task_handle;
 
 // 电机结构体
 Motor_Struct left_top_motor = {.tim = &htim3, .channel = TIM_CHANNEL_1, .speed = 0};
@@ -26,11 +26,19 @@ PID_Struct roll_pid = {.kp = -7.00, .ki = 0.00, .kd = 0.00};
 // X轴角速度结构体 
 PID_Struct gyro_x_pid = {.kp = 3.00, .ki = 0.00, .kd = 0.50};
 
+// 偏航角PID结构体  => 可以只通过比例部分来实现
+PID_Struct yaw_pid = {.kp = -3.00, .ki = 0.00, .kd = 0.00};
+// Z轴角速度结构体 => 对应偏航角的内环
+PID_Struct gyro_z_pid = {.kp = -5.00, .ki = 0.00, .kd = 0.00};
 
+// 定高的PID结构体
+PID_Struct height_pid = {.kp = -0.60, .ki = 0.00, .kd = -0.20};
+
+// 记录下的定高飞行高度
+extern uint16_t fix_height;
 
 /**
  * @brief 飞控任务初始化 MPU6050初始化    启动电机
- *
  */
 void App_flight_init(void)
 {
@@ -41,11 +49,13 @@ void App_flight_init(void)
     Int_motor_start(&left_bottom_motor);
     Int_motor_start(&right_top_motor);
     Int_motor_start(&right_bottom_motor);
+
+    // 初始化激光测距仪
+    Int_VL53L1X_Init();
 }
 
 /**
  * @brief 根据陀螺仪测量的数据 计算出欧拉角
- *
  */
 void App_flight_get_euler_angle(void)
 {
@@ -80,6 +90,7 @@ void App_flight_get_euler_angle(void)
     // debug_printf(":%.2f,%.2f,%.2f\n", euler_angle.pitch, euler_angle.roll, euler_angle.yaw);
 }
 
+
 /**
  * @brief 根据欧拉角 计算出PID的目标值
  *
@@ -113,6 +124,17 @@ void App_flight_pid_process(void)
 
     // 2. 进行PID计算
     Com_PID_Calc_Chain(&roll_pid, &gyro_x_pid);
+
+    // 偏航角
+    // 1. 需要赋值目标值和测量值
+    yaw_pid.desire = (remote_data.yaw - 500) / 50.0;
+    // 内环的测量值
+    yaw_pid.measure = euler_angle.yaw;
+    // 外环的测量值
+    gyro_z_pid.measure = (gyro_accel_data.gyro.gyro_z * 2000.0 / 32768.0);
+
+    // 2. 进行PID计算
+    Com_PID_Calc_Chain(&yaw_pid, &gyro_z_pid);
 }
 
 /**
@@ -132,16 +154,31 @@ void App_flight_control_motor(void)
         right_bottom_motor.speed = 0;
         break;
     case NORMAL:
-        // 俯仰角 => 向前飞有角速度 => 正误差 => 需要一个向后飞的反馈效果 => 前两个电机转的快 后两个转的慢
-        left_top_motor.speed = remote_data.thr + gyro_y_pid.output - gyro_x_pid.output;
-        left_bottom_motor.speed = remote_data.thr - gyro_y_pid.output - gyro_x_pid.output;
-        right_top_motor.speed = remote_data.thr + gyro_y_pid.output + gyro_x_pid.output;
-        right_bottom_motor.speed = remote_data.thr - gyro_y_pid.output + gyro_x_pid.output;
+        // 俯仰角
+        left_top_motor.speed = remote_data.thr + gyro_y_pid.output - gyro_x_pid.output + Com_limit(gyro_z_pid.output, 100, -100);
+        left_bottom_motor.speed = remote_data.thr - gyro_y_pid.output - gyro_x_pid.output - Com_limit(gyro_z_pid.output, 100, -100);
+        right_top_motor.speed = remote_data.thr + gyro_y_pid.output + gyro_x_pid.output - Com_limit(gyro_z_pid.output, 100, -100);
+        right_bottom_motor.speed = remote_data.thr - gyro_y_pid.output + gyro_x_pid.output + Com_limit(gyro_z_pid.output, 100, -100);
         break;
     case FIX_HEIGHT:
-
+        // 只有定高状态才需要进行定高的PID计算  => 定高同时也需要平稳飞行
+        left_top_motor.speed = remote_data.thr + gyro_y_pid.output - gyro_x_pid.output + Com_limit(gyro_z_pid.output, 100, -100) + height_pid.output;
+        left_bottom_motor.speed = remote_data.thr - gyro_y_pid.output - gyro_x_pid.output - Com_limit(gyro_z_pid.output, 100, -100) + height_pid.output;
+        right_top_motor.speed = remote_data.thr + gyro_y_pid.output + gyro_x_pid.output - Com_limit(gyro_z_pid.output, 100, -100) + height_pid.output;
+        right_bottom_motor.speed = remote_data.thr - gyro_y_pid.output + gyro_x_pid.output + Com_limit(gyro_z_pid.output, 100, -100) + height_pid.output;
         break;
     case FAIL:
+        // 进行故障处理 => 一直处理  到满足条件 修改状态为IDLE
+        // 6ms => 降低速度2点
+        left_top_motor.speed -= 2;
+        left_bottom_motor.speed -= 2;
+        right_top_motor.speed -= 2;
+        right_bottom_motor.speed -= 2;
+        if (left_top_motor.speed <= 0 && left_bottom_motor.speed <= 0 && right_top_motor.speed <= 0 && right_bottom_motor.speed <= 0)
+        {
+            // 故障处理完成  电机转速都已经降低为0
+            xTaskNotifyGive(com_task_handle);
+        }
 
         break;
     default:
@@ -149,10 +186,11 @@ void App_flight_control_motor(void)
     }
 
     // 限制电机速度的上限值
-    left_top_motor.speed = Com_limit(left_top_motor.speed, 600, 0);
-    left_bottom_motor.speed = Com_limit(left_bottom_motor.speed, 600, 0);
-    right_top_motor.speed = Com_limit(right_top_motor.speed, 600, 0);
-    right_bottom_motor.speed = Com_limit(right_bottom_motor.speed, 600, 0);
+    // 可以通过提供速度上限  让飞行更加平稳
+    left_top_motor.speed = Com_limit(left_top_motor.speed, 700, 0);
+    left_bottom_motor.speed = Com_limit(left_bottom_motor.speed, 700, 0);
+    right_top_motor.speed = Com_limit(right_top_motor.speed, 700, 0);
+    right_bottom_motor.speed = Com_limit(right_bottom_motor.speed, 700, 0);
 
     // 安全限制 => 当油门设置为<50时 => 强制将速度设置为0
     if (remote_data.thr < 50)
@@ -170,3 +208,16 @@ void App_flight_control_motor(void)
     Int_motor_set_speed(&right_bottom_motor);
 }
 
+/**
+ * @brief 进入定高功能之后的PID计算
+ */
+void App_flight_fix_height_pid_process(void)
+{
+    // 24ms一次
+    // 1. 填写目标值(按下定高功能时的高度)和测量值(当前激光测距仪得到的高度)
+    height_pid.desire = fix_height;
+    height_pid.measure = Int_VL53L1X_GetDistance();
+
+    // 2. 进行单环PID计算  得到输出值
+    Com_PID_Calc(&height_pid);
+}

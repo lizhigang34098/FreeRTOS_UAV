@@ -21,6 +21,9 @@ uint32_t min_enter_time = 0;
 
 // 重试次数
 uint8_t retry_count = 0;
+
+// 按下定高之后的飞行高度
+extern uint16_t fix_height;
 /**
  * @brief 接收遥控器发送的遥控数据 => 解析为结构体
  * @return uint8_t 0:校验通过 是正常的数据 1:没收到数据 或者 校验失败
@@ -64,7 +67,7 @@ uint8_t App_receive_data(void)
     remote_data.shutdown = rx_buff[11];
     remote_data.fix_height = rx_buff[12];
 
-    debug_printf(":%d,%d,%d,%d,%d,%d\n", remote_data.thr, remote_data.yaw, remote_data.pit, remote_data.rol, remote_data.shutdown, remote_data.fix_height);
+    //debug_printf(":%d,%d,%d,%d,%d,%d\n", remote_data.thr, remote_data.yaw, remote_data.pit, remote_data.rol, remote_data.shutdown, remote_data.fix_height);
     return 0;
 }
 
@@ -195,6 +198,9 @@ void App_process_flight_state(void)
         {
             flight_state = FIX_HEIGHT;
             remote_data.fix_height = 0;
+
+            // 记录下当前目标的高度
+            fix_height = Int_VL53L1X_GetDistance();
         }
         // 4. 判断进入故障失联状态
         if (remote_state == REMOTE_DISCONNECTED)
@@ -218,11 +224,13 @@ void App_process_flight_state(void)
         break;
     case FAIL:
         // 7.处理失联故障  缓慢停止电机
-        // TODO
-        vTaskDelay(1);
+        // 等待故障处理完成 => 一直等处理完成 不会出现超时
+        ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
+
         flight_state = IDLE;
         break;
     default:
         break;
     }
 }
+

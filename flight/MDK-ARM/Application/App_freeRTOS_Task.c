@@ -14,7 +14,10 @@ Remote_State remote_state = REMOTE_DISCONNECTED;
 Flight_State flight_state = NORMAL;
 
 // 获取接收的遥控数据
-Remote_Data remote_data = {0};
+Remote_Data remote_data = {.thr = 0, .yaw = 500, .pit = 500, .rol = 500, .fix_height = 0, .shutdown = 0};
+
+// 按下定高的时候 飞行的高度
+uint16_t fix_height = 0;
 
 // 电源管理任务
 void power_task(void *args);
@@ -94,6 +97,7 @@ void flight_task(void *args)
 {
     // 获取当前的基准时间
     TickType_t xLastWakeTime = xTaskGetTickCount();
+    uint8_t count = 0;
     App_flight_init();
     while (1)
     {
@@ -103,7 +107,19 @@ void flight_task(void *args)
         // 2. 根据当前的欧拉角  进行PID计算控制
         App_flight_pid_process();
 
-        // 3. 根据PID计算的结果 对电机进行控制
+         // 3. 判断定高
+        if (flight_state == FIX_HEIGHT)
+        {
+            // 才需要计算PID  => 激光测距仪的数据采集 20ms一次
+            count++;
+            if (count >= 4)
+            {
+                App_flight_fix_height_pid_process();
+                count = 0;
+            }
+        }
+
+        // 4. 根据PID计算的结果 对电机进行控制
         App_flight_control_motor();
         vTaskDelayUntil(&xLastWakeTime, FLIGHT_TASK_PERIOD);
     }

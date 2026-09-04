@@ -27,6 +27,13 @@ void joy_task(void *args);
 TaskHandle_t joy_task_handle;
 #define JOY_TASK_PERIOD 20
 
+// 屏幕任务
+void oled_task(void *args);
+#define OLED_TASK_STACK_SIZE 128
+#define OLED_TASK_PRIORITY 1
+TaskHandle_t oled_task_handle;
+#define OLED_TASK_PERIOD 100
+
 /// @brief 启动FreeRTOS任务
 /// @param  
 void APP_freeRTOS_start(void){
@@ -41,6 +48,9 @@ void APP_freeRTOS_start(void){
 
     //摇杆任务
     xTaskCreate(joy_task, "joy_task", JOY_TASK_STACK_SIZE, NULL, JOY_TASK_PRIORITY, &joy_task_handle);
+
+    // 屏幕任务
+    xTaskCreate(oled_task, "oled_task", OLED_TASK_STACK_SIZE, NULL, OLED_TASK_PRIORITY, &oled_task_handle);
 
     vTaskStartScheduler();
 }
@@ -79,13 +89,25 @@ void joy_task(void *args)
 
 void com_task(void *args)
 {
-    // 获取当前的基准时间
-    TickType_t xLastWakeTime = xTaskGetTickCount();
     while (1)
     {
         // 将打包完成的数据发送到飞机
         App_transmit_data();
         // 6ms执行一次
-        vTaskDelayUntil(&xLastWakeTime, COM_TASK_PERIOD);
+        vTaskDelay(COM_TASK_PERIOD);
+    }
+}
+
+
+void oled_task(void *args)
+{
+    TickType_t xLastWakeTime = xTaskGetTickCount();
+    App_display_init();
+
+    while (1)
+    {
+        App_display_show();
+
+        vTaskDelayUntil(&xLastWakeTime, OLED_TASK_PERIOD);
     }
 }

@@ -4,34 +4,54 @@ extern Remote_Data remote_data;
 
 uint8_t rx_buff[TX_PLOAD_WIDTH] = {0};
 
-//遥控连接状态
+// 遥控连接状态
 extern Remote_State remote_state;
-
-//飞行状态
+// 飞行状态
 extern Flight_State flight_state;
 
-//油门解锁状态
+// 油门解锁状态值
 Thr_state thr_state = FREE;
-
-//MAX状态的进入时间
+// MAX状态的进入时间
 uint32_t max_enter_time = 0;
-
-//MIN状态的进入时间
+// MIN状态的进入时间
 uint32_t min_enter_time = 0;
-
 // 重试次数
 uint8_t retry_count = 0;
 
 // 按下定高之后的飞行高度
 extern uint16_t fix_height;
+extern uint8_t back_buff[TX_PLOAD_WIDTH];
+
 /**
  * @brief 接收遥控器发送的遥控数据 => 解析为结构体
+ *
  * @return uint8_t 0:校验通过 是正常的数据 1:没收到数据 或者 校验失败
  */
 uint8_t App_receive_data(void)
 {
     memset(rx_buff, 0, TX_PLOAD_WIDTH);
-    Int_SI24R1_RxPacket(rx_buff);
+    uint8_t res = Int_SI24R1_RxPacket(rx_buff);
+    if (res == 0)
+    {
+        // 收到遥控数据 => 准备回传
+        Int_SI24R1_TX_Mode();
+
+        uint16_t count = 5;
+        // 回传也要严格按照时序 => 从接收成功遥控数据开始发送 一直到发送完成
+        while (Int_SI24R1_TxPacket(back_buff) == 1 && count--)
+        {
+        }
+        if (count == 0)
+        {
+            // 修改状态为失联
+            remote_state = REMOTE_DISCONNECTED;
+            Int_SI24R1_RX_Mode();
+            return 1;
+        }
+
+        Int_SI24R1_RX_Mode();
+    }
+
     if (strlen((char *)rx_buff) == 0)
     {
         return 1;
@@ -67,7 +87,7 @@ uint8_t App_receive_data(void)
     remote_data.shutdown = rx_buff[11];
     remote_data.fix_height = rx_buff[12];
 
-    //debug_printf(":%d,%d,%d,%d,%d,%d\n", remote_data.thr, remote_data.yaw, remote_data.pit, remote_data.rol, remote_data.shutdown, remote_data.fix_height);
+    // debug_printf(":%d,%d,%d,%d,%d,%d\n", remote_data.thr, remote_data.yaw, remote_data.pit, remote_data.rol, remote_data.shutdown, remote_data.fix_height);
     return 0;
 }
 
@@ -97,8 +117,11 @@ void App_process_connect_state(uint8_t res)
     }
 }
 
-/// @brief 处理解锁逻辑
-/// @return uint8_t 0:解锁成功 1:解锁失败
+/**
+ * @brief 处理解锁逻辑
+ *
+ * @return uint8_t 0: 解锁成功 1: 解锁失败
+ */
 static uint8_t App_process_unlock(void)
 {
     // 1. 考虑安全问题 =>  解锁完成的最终状态应该是油门为0
@@ -108,7 +131,7 @@ static uint8_t App_process_unlock(void)
         if (remote_data.thr >= 900)
         {
             // 2. 进入max状态
-            thr_state = MAX; 
+            thr_state = MAX;
             // freeRTOS操作系统中以ms为单位计数的时间
             max_enter_time = xTaskGetTickCount();
         }
@@ -233,4 +256,3 @@ void App_process_flight_state(void)
         break;
     }
 }
-

@@ -19,6 +19,9 @@ Remote_Data remote_data = {.thr = 0, .yaw = 500, .pit = 500, .rol = 500, .fix_he
 // 按下定高的时候 飞行的高度
 uint16_t fix_height = 0;
 
+// 电池电压 => 数组保存
+uint8_t back_buff[TX_PLOAD_WIDTH] = {0};
+
 // 电源管理任务
 void power_task(void *args);
 // 最小推荐填写128 => 128*4 = 512B
@@ -46,7 +49,7 @@ TaskHandle_t led_task_handle;
 // 通讯任务
 void com_task(void *args);
 #define COM_TASK_STACK_SIZE 128
-#define COM_TASK_PRIORITY 2
+#define COM_TASK_PRIORITY 4
 TaskHandle_t com_task_handle;
 #define COM_TASK_PERIOD 6
 
@@ -200,6 +203,7 @@ void com_task(void *args)
 {
     // 获取当前的基准时间
     TickType_t xLastWakeTime = xTaskGetTickCount();
+    Int_bat_ADC_Init();
     while (1)
     {
         // 1. 接收数据
@@ -211,18 +215,19 @@ void com_task(void *args)
         // 3. 处理关机命令
         if (remote_data.shutdown == 1)
         {
-            // 使用Int_IP5305T_shutdown 关机  功能可以实现  但是项目结构比较奇怪
-            // Int_IP5305T_shutdown();
-
             // 使用freeRTOS直接任务通知 => 通知电源任务 => 执行关机
             xTaskNotifyGive(power_task_handle);
         }
 
-        // 处理飞机的飞行状态
+        // 4.处理飞机的飞行状态
         App_process_flight_state();
 
+        // 5. 准备回传电池电压值
+        float voltage = Int_bat_ADC_Read();
+        sprintf((char *)back_buff, "%.2f", voltage);
+
         // 6ms执行一次 接收数据的时间间隔应该等于发送数据的时间间隔
-        vTaskDelayUntil(&xLastWakeTime, COM_TASK_PERIOD);
+        vTaskDelay(COM_TASK_PERIOD);
     }
 }
 

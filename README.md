@@ -1,74 +1,102 @@
-# FreeRTOS_UAV 开发指南
+# FreeRTOS_UAV 无人机开发项目
+
+> **新开发者必读**: 在开始阅读代码之前，请先阅读 `Project_Step_Analysis/` 文件夹中的文档。这些文档按开发顺序详细讲解了从 CubeMX 配置、FreeRTOS 移植、各硬件驱动开发到完整飞控系统集成的全过程，是理解本项目架构和设计思路的最佳入口。
 
 ## 项目概述
 
-这是一个基于 STM32F103C8T6 的无人机系统，包含两个独立的 Keil MDK 工程：
+基于 STM32F103C8T6 的四旋翼无人机系统，包含两个独立的 Keil MDK 工程：
 
-- **P01_flight_hal**: 飞控板（接收遥控指令、姿态解算、PID控制、电机输出）
-- **P02_remote_hal**: 遥控器（摇杆采集、按键输入、OLED显示、无线发送）
+| 工程 | 目录 | 功能 |
+|------|------|------|
+| **flight** | `flight/` | 飞控板 — 接收遥控指令、姿态解算、PID 控制、电机输出 |
+| **remote** | `remote/` | 遥控器 — 摇杆采集、按键输入、OLED 显示、无线发送 |
 
 两者通过 SI24R1 2.4GHz 无线模块通信，使用自定义 17 字节帧协议。
 
-## 工具链与构建
+## 快速开始
+
+1. 阅读 `Project_Step_Analysis/` 文件夹中的开发文档（推荐按编号顺序）
+2. 使用 Keil MDK-ARM 打开 `flight/MDK-ARM/flight.uvprojx` 或 `remote/MDK-ARM/remote.uvprojx`
+3. 编译并烧录到对应硬件
+
+## 工具链
 
 - **IDE**: Keil MDK-ARM (uVision)
-- **工程文件**: `P01_flight_hal/MDK-ARM/P01_flight_hal.uvprojx` 和 `P02_remote_hal/MDK-ARM/P02_remote_hal.uvprojx`
 - **MCU**: STM32F103C8T6 (Cortex-M3, 72MHz, 20KB SRAM, 64KB Flash)
 - **代码生成**: STM32CubeMX (`.ioc` 文件)
-- **无命令行构建**: 本项目必须在 Keil MDK 中编译，无 Makefile 或 CMake
+- **无命令行构建**: 必须在 Keil MDK 中编译，无 Makefile 或 CMake
 
 ## 项目结构
 
 ```
-├── Core/                    # CubeMX 生成的 HAL 初始化代码 (勿手动修改)
-│   ├── Inc/                 # 外设头文件 (main.h, gpio.h, spi.h, ...)
-│   └── Src/                 # 外设初始化 (main.c, gpio.c, spi.c, ...)
-├── Drivers/                 # ST 官方 HAL 驱动 (CubeMX 自动生成)
-└── MDK-ARM/                 # ★ 自定义代码全部在此目录
-    ├── Application/         # 应用层 (业务逻辑)
-    ├── interface/           # 硬件驱动层 (外设封装)
-    ├── common/              # 通用算法层 (PID, IMU, 滤波, 调试)
-    └── freeRTOS/            # FreeRTOS 内核源码
+FreeRTOS_UAV/
+├── flight/                          # 飞控工程
+│   ├── Core/                        # CubeMX 生成的 HAL 初始化代码 (勿手动修改)
+│   │   ├── Inc/                     # 外设头文件
+│   │   └── Src/                     # 外设初始化
+│   ├── Drivers/                     # ST 官方 HAL 驱动 (自动生成)
+│   ├── MDK-ARM/                     # ★ 自定义代码全部在此目录
+│   │   ├── Application/             # 应用层 (业务逻辑)
+│   │   ├── interface/               # 硬件驱动层 (外设封装)
+│   │   │   └── fix_height/          # VL53L1X 激光测距驱动
+│   │   ├── common/                  # 通用算法层 (PID, IMU, 滤波)
+│   │   └── freeRTOS/                # FreeRTOS 内核源码
+│   └── flight.ioc                   # CubeMX 配置文件
+│
+├── remote/                          # 遥控器工程
+│   ├── Core/                        # CubeMX 生成的 HAL 初始化代码
+│   ├── Drivers/                     # ST 官方 HAL 驱动
+│   ├── MDK-ARM/                     # ★ 自定义代码全部在此目录
+│   │   ├── Application/             # 应用层
+│   │   ├── interface/               # 硬件驱动层
+│   │   │   └── oled/                # OLED 显示驱动
+│   │   ├── common/                  # 通用工具
+│   │   └── freeRTOS/                # FreeRTOS 内核源码
+│   └── remote.ioc                   # CubeMX 配置文件
+│
+├── Project_Step_Analysis/           # ★ 开发步骤文档 (新开发者必读)
+├── Datasheet/                       # 硬件芯片数据手册
+└── README.md
 ```
 
 ## 三层架构
 
 ### Application 层 (MDK-ARM/Application/)
 
-| 文件              | 飞控 (P01)                      | 遥控器 (P02)            |
-| ----------------- | ------------------------------- | ----------------------- |
-| App_freeRTOS_Task | FreeRTOS 任务创建与调度         | FreeRTOS 任务创建与调度 |
-| App_flight        | 飞行控制核心 (MPU6050→PID→电机) | -                       |
-| App_receive_data  | 遥控数据接收与协议解析          | -                       |
-| App_transmit_data | -                               | 数据打包与发送          |
-| App_process_data  | -                               | 摇杆数据处理与按键事件  |
-| App_display       | -                               | OLED 显示控制           |
+| 文件 | 飞控 (flight) | 遥控器 (remote) |
+|------|---------------|-----------------|
+| App_freeRTOS_Task | FreeRTOS 任务创建与调度 | FreeRTOS 任务创建与调度 |
+| App_flight | 飞行控制核心 (MPU6050→PID→电机) | - |
+| App_receive_data | 遥控数据接收与协议解析 | - |
+| App_transmit_data | - | 数据打包与发送 |
+| App_process_data | - | 摇杆数据处理与按键事件 |
+| App_display | - | OLED 显示控制 |
 
 ### interface 层 (MDK-ARM/interface/)
 
-| 文件         | 功能                                     |
-| ------------ | ---------------------------------------- |
-| Int_SI24R1   | SI24R1 无线模块 SPI 驱动 (兼容 nRF24L01) |
-| Int_motor    | PWM 电机驱动 (TIM1/TIM2/TIM3/TIM4)       |
-| Int_led      | LED GPIO 控制 (低电平点亮)               |
-| Int_mpu6050  | MPU6050 六轴 IMU I2C 驱动                |
-| Int_bat_ADC  | 电池电压 ADC 采样 (分压比 1:2)           |
-| Int_IP5305T  | IP5305T 电源管理芯片控制                 |
-| Int_VL53L1X  | VL53L1X 激光测距 ToF 传感器              |
-| Int_joystick | ADC 摇杆采集 (DMA)                       |
-| Int_key      | 6 按键检测 (含消抖与长按)                |
-| Inf_OLED     | 0.96 寸 OLED SPI 驱动                    |
+| 文件 | 功能 |
+|------|------|
+| Int_SI24R1 | SI24R1 无线模块 SPI 驱动 (兼容 nRF24L01) |
+| Int_motor | PWM 电机驱动 (TIM1/TIM2/TIM3/TIM4) |
+| Int_led | LED GPIO 控制 (低电平点亮) |
+| Int_mpu6050 | MPU6050 六轴 IMU I2C 驱动 |
+| Int_bat_ADC | 电池电压 ADC 采样 (分压比 1:2) |
+| Int_IP5305T | IP5305T 电源管理芯片控制 |
+| Int_VL53L1X | VL53L1X 激光测距 ToF 传感器 |
+| Int_joystick | ADC 摇杆采集 (DMA) |
+| Int_key | 6 按键检测 (含消抖与长按) |
+| Inf_OLED | 0.96 寸 OLED SPI 驱动 |
 
 ### common 层 (MDK-ARM/common/)
 
-| 文件       | 功能                                        |
-| ---------- | ------------------------------------------- |
+| 文件 | 功能 |
+|------|------|
 | Com_config | 全局类型定义 (Remote_Data, Flight_State 等) |
-| Com_debug  | printf 重定向到 UART + debug_printf 宏      |
-| Com_pid    | PID 控制器 + 串级 PID                       |
-| Com_imu    | 四元数姿态解算 (Mahony 互补滤波)            |
-| Com_filter | 角速度一阶低通滤波 + 加速度卡尔曼滤波       |
-| Com_tool   | 通用工具函数 (限幅)                         |
+| Com_debug | printf 重定向到 UART + debug_printf 宏 |
+| Com_pid | PID 控制器 + 串级 PID |
+| Com_imu | 四元数姿态解算 (Mahony 互补滤波) |
+| Com_filter | 角速度一阶低通滤波 + 加速度卡尔曼滤波 |
+| Com_tool | 通用工具函数 (限幅) |
 
 ## 无线通信协议
 
@@ -77,7 +105,7 @@
 - **模块**: SI24R1 (兼容 nRF24L01)
 - **频段**: 2.440GHz (Channel 40)
 - **速率**: 1Mbps
-- **功率**: -4dBm (飞控) / 0dBm (遥控器)
+- **功率**: -4dBm (两端相同)
 - **CRC**: 16 位
 - **地址**: 5 字节 `{0x0A, 0x01, 0x06, 0x1E, 0x01}`
 
@@ -85,9 +113,9 @@
 
 ```
 字节偏移  内容                    说明
-[0]      0x73 ('s')             帧头校验1
-[1]      0x67 ('g')             帧头校验2
-[2]      0x67 ('g')             帧头校验3
+[0]      0x63 ('c')             帧头校验1
+[1]      0x73 ('s')             帧头校验2
+[2]      0x72 ('r')             帧头校验3
 [3-4]    thr (大端序)           油门 0-1000
 [5-6]    yaw (大端序)           偏航 0-1000
 [7-8]    pit (大端序)           俯仰 0-1000
@@ -99,29 +127,29 @@
 
 ### 通信流程
 
-1. 遥控器 (TX 主动方): 打包数据 → SI24R1 发送 → 等待回传 (500 次轮询) → 切回 RX
-2. 飞控 (RX 被动方): RX 等待 → 收到数据 → TX 回传电池电压 → 切回 RX
+1. **遥控器 (TX 主动方)**: 打包数据 → SI24R1 发送 → 等待回传 (500 次轮询) → 切回 RX
+2. **飞控 (RX 被动方)**: RX 等待 → 收到数据 → TX 回传电池电压 → 切回 RX
 
 ## FreeRTOS 任务
 
-### 飞控任务 (P01)
+### 飞控任务
 
-| 任务        | 优先级   | 堆栈      | 周期  | 功能                             |
-| ----------- | -------- | --------- | ----- | -------------------------------- |
-| power_task  | 4 (最高) | 128 words | 10s   | IP5305T 电源管理，接收通知关机   |
-| flight_task | 3        | 128 words | 6ms   | MPU6050 采集→姿态解算→PID→电机   |
-| com_task    | 4        | 128 words | 10ms  | 遥控数据接收、状态管理、电池回传 |
-| led_task    | 1 (最低) | 128 words | 100ms | LED 状态指示 (连接/飞行状态)     |
+| 任务 | 优先级 | 堆栈 | 周期 | 功能 |
+|------|--------|------|------|------|
+| power_task | 4 (最高) | 128 words | 10s | IP5305T 电源管理，接收通知关机 |
+| com_task | 4 | 128 words | 6ms | 遥控数据接收、状态管理、电池回传 |
+| flight_task | 3 | 128 words | 6ms | MPU6050 采集→姿态解算→PID→电机 |
+| led_task | 1 (最低) | 128 words | 100ms | LED 状态指示 (连接/飞行状态) |
 
-### 遥控器任务 (P02)
+### 遥控器任务
 
-| 任务       | 优先级 | 堆栈      | 周期  | 功能                   |
-| ---------- | ------ | --------- | ----- | ---------------------- |
-| power_task | 4      | 128 words | 10s   | IP5305T 电源维持       |
-| com_task   | 3      | 128 words | 10ms  | 数据打包发送与回传接收 |
-| key_task   | 2      | 128 words | 20ms  | 按键检测与事件处理     |
-| joy_task   | 2      | 128 words | 20ms  | 摇杆 ADC 采集与校准    |
-| oled_task  | 1      | 128 words | 100ms | OLED 显示刷新          |
+| 任务 | 优先级 | 堆栈 | 周期 | 功能 |
+|------|--------|------|------|------|
+| power_task | 4 | 128 words | 10s | IP5305T 电源维持 |
+| com_task | 3 | 128 words | 6ms | 数据打包发送与回传接收 |
+| key_task | 2 | 128 words | 20ms | 按键检测与事件处理 |
+| joy_task | 2 | 128 words | 20ms | 摇杆 ADC 采集与校准 |
+| oled_task | 1 | 128 words | 100ms | OLED 显示刷新 |
 
 ## 关键配置
 
@@ -142,11 +170,14 @@
 
 ### 电机映射
 
-- TIM3_CH1: 左上电机
-- TIM4_CH4: 右上电机
-- TIM2_CH2: 左下电机
-- TIM1_CH3: 右下电机
-- PWM 范围: 0-1000
+| 定时器通道 | 位置 |
+|-----------|------|
+| TIM3_CH1 | 左上电机 |
+| TIM4_CH4 | 右上电机 |
+| TIM2_CH2 | 左下电机 |
+| TIM1_CH3 | 右下电机 |
+
+PWM 范围: 0-1000
 
 ## 开发规范
 
@@ -156,7 +187,6 @@
 - **函数命名**: `模块_动作` 格式 (如 `Int_motor_set_speed`)
 - **结构体**: `模块_Struct` 格式 (如 `LED_Struct`, `Motor_Struct`)
 - **枚举**: `状态_值` 格式 (如 `REMOTE_CONNECTED`, `IDLE`)
-- **全局变量**: 直接使用小写下划线 (如 `remote_state`, `flight_state`)
 
 ### 文件组织
 
@@ -172,40 +202,27 @@
 
 ### 状态管理
 
-- **遥控连接状态**: `Remote_State` 枚举 (CONNECTED/DISCONNECTED)
-- **飞行状态**: `Flight_State` 枚举 (IDLE/NORMAL/FIX_HEIGHT/FAIL)
+- **遥控连接状态**: `Remote_State` 枚举 (CONNECTED / DISCONNECTED)
+- **飞行状态**: `Flight_State` 枚举 (IDLE / NORMAL / FIX_HEIGHT / FAIL)
 - **解锁状态机**: FREE→MAX→LEAVE_MAX→MIN→UNLOCK (油门杆操作序列)
 
 ## 注意事项
 
-1. **CubeMX 重新生成**: 如果修改了 `.ioc` 文件并重新生成代码，`Core/` 目录会被覆盖，确保自定义代码在 `MDK-ARM/` 中
-2. **内存限制**: STM32F103C8T6 只有 20KB SRAM，FreeRTOS 堆占 12KB，任务堆栈每个 512 字节
-3. **MPU6050 校准**: 启动时必须静止，自动执行 100 次偏移校准
-4. **脉冲信号**: `shutdown` 和 `fix_height` 是脉冲信号，读取后必须清零
-5. **半双工通信**: SI24R1 不能同时收发，必须严格时分切换
-6. **无命令行构建**: 必须使用 Keil MDK-ARM 编译，无法通过命令行构建
+1. **Remote_Data 结构体差异**: 飞控 (`Com_config.h`) 和遥控器 (`App_process_data.h`) 中 `Remote_Data` 结构体的 `pit`/`rol` 字段顺序不同。通信靠字节位置拼接/解析，不影响运行，但修改协议时需注意两端保持一致
+2. **CubeMX 重新生成**: 修改 `.ioc` 文件并重新生成代码后，`Core/` 目录会被覆盖，确保自定义代码在 `MDK-ARM/` 中
+3. **内存限制**: STM32F103C8T6 只有 20KB SRAM，FreeRTOS 堆占 12KB，任务堆栈每个 512 字节
+4. **MPU6050 校准**: 启动时必须静止，自动执行 100 次偏移校准
+5. **脉冲信号**: `shutdown` 和 `fix_height` 是脉冲信号，读取后必须清零
+6. **半双工通信**: SI24R1 不能同时收发，必须严格时分切换
+7. **无命令行构建**: 必须使用 Keil MDK-ARM 编译，无法通过命令行构建
 
-## 常见任务
+## 参考资料
 
-### 添加新的 FreeRTOS 任务
+`Datasheet/` 文件夹中包含所有硬件芯片的数据手册：
 
-1. 在 `App_freeRTOS_Task.c` 中定义任务函数、堆栈大小、优先级
-2. 在 `App_freeRTOS_start()` 中调用 `xTaskCreate()` 创建任务
-3. 注意总堆栈不能超过 12KB 限制
-
-### 修改 PID 参数
-
-1. 编辑 `MDK-ARM/common/Com_pid.h` 中的 PID 结构体初始化
-2. 或在 `App_flight.c` 中直接修改 PID 增量计算
-
-### 调试无线通信
-
-1. 使用 `debug_printf()` 在飞控和遥控器两端输出收发数据
-2. 检查 SI24R1 初始化时的芯片校验 (读回 TX_ADDR 对比)
-3. 确认帧头 `'s','g','g'` 和累加和校验正确
-
-### 添加新的传感器
-
-1. 在 `MDK-ARM/interface/` 中创建新的 `Int_xxx.h/.c` 文件
-2. 参考 `Int_mpu6050.c` 的 I2C 驱动模式
-3. 在 CubeMX 中配置对应的外设 (I2C/SPI/GPIO)
+- STM32F103x8B 数据手册与参考手册
+- MPU6050 寄存器表与产品说明书
+- SI24R1 无线模块手册
+- IP5305T 电池管理手册
+- VL53L1X 激光测距手册
+- OLED 显示屏手册 (SSD1315)
